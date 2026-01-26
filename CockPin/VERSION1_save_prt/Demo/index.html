@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PinCock</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f9f9f9;
+      }
+      h1 {
+        color: #333;
+        text-align: center;
+      }
+      .map-container {
+        width: 100%;
+        height: 500px;
+        margin-top: 20px;
+      }
+      .upload-container {
+        margin: 20px 0;
+        text-align: center;
+      }
+      input,
+      button {
+        margin: 5px;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+      }
+      button {
+        background-color: #007bff;
+        color: white;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>📌PinCock📌</h1>
+    <p>Upload a photo, select a location, and share it with others!</p>
+
+    <div class="upload-container">
+      <input type="file" id="photoInput" accept="image/*" />
+      <button id="useCurrentLocation">Use Current Location</button>
+      <button id="otherLocation">Other Location</button>
+      <input
+        type="text"
+        id="addressInput"
+        placeholder="Enter address (도로명 주소)"
+      />
+    </div>
+
+    <div id="map" class="map-container"></div>
+
+    <div>
+      <p id="status" style="margin-top: 10px; color: #333; text-align: center">
+        Drag the marker to select a location, or use your current location.
+      </p>
+      <button id="saveLocation">Save Location</button>
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+      // Initialize the map
+      let map = L.map("map").setView([33.4996, 126.5312], 10); // 제주도 중심 좌표
+
+      // Load OpenStreetMap tiles
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(map);
+
+      let marker = L.marker([33.4996, 126.5312], { draggable: true }).addTo(
+        map
+      );
+      let sharedLocations =
+        JSON.parse(localStorage.getItem("sharedLocations")) || [];
+
+      function loadSharedLocations() {
+        sharedLocations.forEach((location) => {
+          L.marker([location.lat, location.lng])
+            .addTo(map)
+            .bindPopup(
+              `<p>${
+                location.photo
+                  ? `<img src="${location.photo}" style="width:100px;">`
+                  : "No photo uploaded"
+              }</p>`
+            );
+        });
+      }
+      loadSharedLocations();
+
+      function updateStatus(lat, lng) {
+        document.getElementById(
+          "status"
+        ).textContent = `Selected Location: Latitude ${lat.toFixed(
+          6
+        )}, Longitude ${lng.toFixed(6)}`;
+      }
+
+      marker.on("dragend", function () {
+        const position = marker.getLatLng();
+        updateStatus(position.lat, position.lng);
+      });
+
+      async function geocodeAddress(address) {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+            address
+          )}`
+        );
+        const results = await response.json();
+        if (results.length > 0) {
+          const { lat, lon } = results[0];
+          return { lat: parseFloat(lat), lng: parseFloat(lon) };
+        } else {
+          alert("Address not found.");
+          return null;
+        }
+      }
+
+      document
+        .getElementById("useCurrentLocation")
+        .addEventListener("click", function () {
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              function (position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+
+                marker.setLatLng([lat, lng]);
+                map.setView([lat, lng], 15);
+                updateStatus(lat, lng);
+              },
+              function () {
+                alert("Unable to fetch your location.");
+              }
+            );
+          } else {
+            alert("Geolocation is not supported by your browser.");
+          }
+        });
+
+      document
+        .getElementById("otherLocation")
+        .addEventListener("click", async function () {
+          const address = document.getElementById("addressInput").value;
+          if (!address) {
+            alert("Please enter an address.");
+            return;
+          }
+
+          // 1. Geocode the address
+          const position = await geocodeAddress(address);
+          if (position) {
+            const { lat, lng } = position;
+
+            // 2. Update marker position and map view
+            marker.setLatLng([lat, lng]);
+            map.setView([lat, lng], 15);
+            updateStatus(lat, lng);
+
+            // 3. Save marker to the map with popup
+            L.marker([lat, lng])
+              .addTo(map)
+              .bindPopup(`<p>Address: ${address}</p>`)
+              .openPopup();
+
+            // 4. Send data to the server
+            const photoInput = document.getElementById("photoInput");
+            const file = photoInput.files[0];
+            if (!file) {
+              alert("Please upload an image.");
+              return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = async function (event) {
+              const photoURL = event.target.result;
+              const location = { lat, lng, address, photo: photoURL };
+
+              // Save to localStorage
+              sharedLocations.push(location);
+              localStorage.setItem(
+                "sharedLocations",
+                JSON.stringify(sharedLocations)
+              );
+
+              // Send data to Flask server
+              await fetch("http://localhost:5001/input_image", {
+                method: "POST",
+                body: JSON.stringify({ photo: photoURL }),
+                headers: { "Content-Type": "application/json" },
+              });
+
+              await fetch("http://localhost:5001/input_adress", {
+                method: "POST",
+                body: JSON.stringify(location),
+                headers: { "Content-Type": "application/json" },
+              });
+
+              alert("Location saved and shared!");
+            };
+            reader.readAsDataURL(file);
+          }
+        });
+    </script>
+  </body>
+</html>

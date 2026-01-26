@@ -1,0 +1,14 @@
+{
+  // Expo의 베이스 TS 설정을 우선 적용
+  "extends": "expo/tsconfig.base",
+
+  "compilerOptions": {
+    // 기존 Expo 설정보다 우선 적용될 항목들을 명시
+    "jsx": "react-jsx", // React 17+ 새로운 JSX 트랜스폼
+    "allowJs": true, // JS 파일도 컴파일에 포함할지 여부(필요시)
+    "target": "esnext", // 빌드 타겟 (최신 문법 유지)
+    "module": "esnext" // 모듈 시스템
+    // "strict": true,         // 엄격 모드 (권장 사항; 필요시 주석 해제)
+    // "noEmit": true,         // Expo 프로젝트는 주로 Babel이 처리하므로, 빌드 산출 불필요시
+  }
+}

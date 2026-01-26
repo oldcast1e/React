@@ -1,0 +1,16 @@
+{
+    "name": "apple/rn",
+    "description": "new composers",
+    "autoload": {
+        "psr-4": {
+            "Apple\\Rn\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "oldcast1e",
+            "email": "kylhs0207@naver.com"
+        }
+    ],
+    "require": {}
+}
